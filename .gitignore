@@ -1,0 +1,7 @@
+/build/
+/out/
+/.vs/
+ui/node_modules/
+ui/dist/
+*.user
+.impeccable/review/
