@@ -1,46 +1,61 @@
-# Renders resources/app.ico from the same design as assets/icon.svg
-# (purple rounded square with a white "A"). Run with Windows PowerShell 5.1+:
+# Renders resources/app.ico and the Settings logo (ui/src/assets/logo-96.png)
+# from the master artwork in assets/logo.png. Run with Windows PowerShell 5.1+:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-icon.ps1
-param([string]$Out = (Join-Path $PSScriptRoot '..\resources\app.ico'))
-
+param(
+  [string]$Source = (Join-Path $PSScriptRoot '..\assets\logo.png'),
+  [string]$Out = (Join-Path $PSScriptRoot '..\resources\app.ico'),
+  [string]$UiOut = (Join-Path $PSScriptRoot '..\ui\src\assets\logo-96.png')
+)
+$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
-$sizes = 16, 20, 24, 32, 40, 48, 64, 128, 256
-$pngs = @()
 
-foreach ($s in $sizes) {
-  $bmp = New-Object System.Drawing.Bitmap $s, $s, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+function Resize([System.Drawing.Bitmap]$Image, [int]$Size) {
+  $bmp = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
   $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $g.SmoothingMode = 'AntiAlias'
-  $g.TextRenderingHint = 'AntiAliasGridFit'
+  $g.InterpolationMode = 'HighQualityBicubic'
+  $g.PixelOffsetMode = 'HighQuality'
+  $g.CompositingQuality = 'HighQuality'
   $g.Clear([System.Drawing.Color]::Transparent)
-
-  $r = [single]($s * 14 / 64)
-  $d = 2 * $r
-  $w = [single]($s - 1)
-  $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-  $path.AddArc(0, 0, $d, $d, 180, 90)
-  $path.AddArc($w - $d, 0, $d, $d, 270, 90)
-  $path.AddArc($w - $d, $w - $d, $d, $d, 0, 90)
-  $path.AddArc(0, $w - $d, $d, $d, 90, 90)
-  $path.CloseFigure()
-
-  $grad = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.PointF 0, 0), (New-Object System.Drawing.PointF $s, $s), ([System.Drawing.Color]::FromArgb(255, 0xA8, 0x55, 0xF7)), ([System.Drawing.Color]::FromArgb(255, 0x7E, 0x22, 0xCE))
-  $g.FillPath($grad, $path)
-
-  $fontSize = [single]($s * 0.5)
-  $font = New-Object System.Drawing.Font 'Segoe UI Semibold', $fontSize, ([System.Drawing.FontStyle]::Regular), ([System.Drawing.GraphicsUnit]::Pixel)
-  $fmt = New-Object System.Drawing.StringFormat
-  $fmt.Alignment = 'Center'
-  $fmt.LineAlignment = 'Center'
-  $rect = New-Object System.Drawing.RectangleF 0, ([single]($s * 0.02)), $s, $s
-  $g.DrawString('A', $font, [System.Drawing.Brushes]::White, $rect, $fmt)
+  $attrs = New-Object System.Drawing.Imaging.ImageAttributes
+  $attrs.SetWrapMode([System.Drawing.Drawing2D.WrapMode]::TileFlipXY)
+  $g.DrawImage($Image, (New-Object System.Drawing.Rectangle 0, 0, $Size, $Size), 0, 0, $Image.Width, $Image.Height, 'Pixel', $attrs)
   $g.Dispose()
+  return $bmp
+}
 
+# Halve repeatedly before the final step so small sizes stay crisp.
+function Render([System.Drawing.Bitmap]$Master, [int]$Size) {
+  $current = $Master
+  while ($current.Width / 2 -ge $Size * 2) {
+    $next = Resize $current ([int]($current.Width / 2))
+    if ($current -ne $Master) { $current.Dispose() }
+    $current = $next
+  }
+  $result = Resize $current $Size
+  if ($current -ne $Master) { $current.Dispose() }
+  return $result
+}
+
+function PngBytes([System.Drawing.Bitmap]$Bitmap) {
   $ms = New-Object System.IO.MemoryStream
-  $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-  $pngs += , @($s, $ms.ToArray())
+  $Bitmap.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+  return , $ms.ToArray()
+}
+
+$master = New-Object System.Drawing.Bitmap (Resolve-Path -LiteralPath $Source).Path
+$pngs = @()
+foreach ($s in 16, 20, 24, 32, 40, 48, 64, 128, 256) {
+  $bmp = Render $master $s
+  $pngs += , @($s, (PngBytes $bmp))
   $bmp.Dispose()
 }
+
+$uiDir = Split-Path $UiOut
+New-Item -ItemType Directory -Path $uiDir -Force | Out-Null
+$ui = Render $master 96
+[System.IO.File]::WriteAllBytes((Join-Path (Resolve-Path -LiteralPath $uiDir).Path (Split-Path $UiOut -Leaf)), (PngBytes $ui))
+$ui.Dispose()
+$master.Dispose()
 
 $fs = [System.IO.File]::Create((Resolve-Path -LiteralPath (Split-Path $Out)).Path + '\' + (Split-Path $Out -Leaf))
 $bw = New-Object System.IO.BinaryWriter $fs
@@ -56,4 +71,4 @@ foreach ($p in $pngs) {
 }
 foreach ($p in $pngs) { $bw.Write([byte[]]$p[1]) }
 $bw.Close()
-Write-Host "Wrote $Out"
+Write-Host "Wrote $Out and $UiOut"

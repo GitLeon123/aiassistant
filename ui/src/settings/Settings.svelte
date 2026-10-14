@@ -10,6 +10,7 @@
   import ProvidersSection from './ProvidersSection.svelte';
   import SetupSection from './SetupSection.svelte';
   import UsageSection from './UsageSection.svelte';
+  import logoUrl from '../assets/logo-96.png';
 
   type Page = 'setup' | 'general' | 'providers' | 'model' | 'privacy' | 'usage' | 'about';
   const NAV: { id: Page; label: string; icon: IconName }[] = [
@@ -47,7 +48,7 @@
 <div class="shell">
   <nav aria-label="Settings">
     <div class="brand">
-      <span class="logo"><Icon name="sparkle" size={18} fill /></span>
+      <img class="logo" src={logoUrl} alt="" width="30" height="30" />
       <span>AIAssistant</span>
     </div>
     {#each NAV as item (item.id)}
@@ -130,16 +131,9 @@
     font-weight: 600;
   }
   .logo {
-    display: grid;
-    place-items: center;
     width: 30px;
     height: 30px;
-    border-radius: 9px;
-    color: #fff;
-    background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 70%, white), var(--accent));
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.4),
-      0 4px 12px -4px color-mix(in srgb, var(--accent) 70%, transparent);
+    filter: drop-shadow(0 3px 6px rgba(76, 52, 232, 0.35));
   }
   .nav-item {
     position: relative;
